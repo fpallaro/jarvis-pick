@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src https://api.github.com; img-src 'none'; base-uri 'none'; form-action 'none'">
+<meta name="referrer" content="no-referrer">
+<meta name="robots" content="noindex">
+<title>Jarvis · cosa hai fatto</title>
+<style>
+  :root { --bg:#f6f7f9; --card:#fff; --ink:#1f2328; --muted:#6b7280; --line:#e5e7eb;
+          --accent:#2563eb; --done:#16a34a; --done-bg:#dcfce7; --drop-bg:#f3f4f6; --warn:#b45309; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#0f1115; --card:#1a1d23; --ink:#e6e8eb; --muted:#9aa3af; --line:#2a2f37;
+            --accent:#60a5fa; --done:#4ade80; --done-bg:#12301d; --drop-bg:#22262d; --warn:#f59e0b; }
+  }
+  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  body { margin:0; background:var(--bg); color:var(--ink);
+         font:16px/1.4 -apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; }
+  main { max-width:640px; margin:0 auto; padding:20px 16px 120px; }
+  h1 { font-size:22px; margin:0 0 4px; }
+  .sub { color:var(--muted); margin:0 0 18px; font-size:14px; }
+  h2 { font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:var(--accent); margin:22px 0 8px; }
+  .card { display:flex; gap:12px; align-items:flex-start; background:var(--card); border:1px solid var(--line);
+          border-radius:12px; padding:12px; margin:0 0 8px; cursor:pointer; user-select:none; transition:background .12s; }
+  .num { flex:0 0 36px; height:28px; border-radius:8px; background:var(--drop-bg); color:var(--accent);
+         font-weight:700; font-size:14px; display:flex; align-items:center; justify-content:center; }
+  .t { font-weight:600; }
+  .m { color:var(--muted); font-size:13px; margin-top:2px; }
+  .state { margin-left:auto; flex:0 0 auto; font-size:12px; font-weight:600; padding:3px 8px; border-radius:999px; display:none; }
+  .card.done { background:var(--done-bg); border-color:var(--done); }
+  .card.done .num { background:var(--done); color:#fff; }
+  .card.done .state { display:block; color:var(--done); }
+  .card.drop { background:var(--drop-bg); }
+  .card.drop .t { text-decoration:line-through; color:var(--muted); }
+  .card.drop .state { display:block; color:var(--muted); }
+  .hint { color:var(--muted); font-size:13px; margin:18px 0 0; }
+  .bar { position:fixed; left:0; right:0; bottom:0; background:var(--card); border-top:1px solid var(--line);
+         padding:12px 16px calc(12px + env(safe-area-inset-bottom)); }
+  .bar-in { max-width:640px; margin:0 auto; display:flex; gap:12px; align-items:center; }
+  .count { color:var(--muted); font-size:14px; flex:1; }
+  button { border:0; border-radius:10px; background:var(--accent); color:#fff; font-size:16px; font-weight:600;
+           padding:12px 20px; cursor:pointer; }
+  button:disabled { opacity:.45; cursor:default; }
+  .msg { text-align:center; padding:60px 8px; }
+  .msg .big { font-size:44px; }
+  .err { color:var(--warn); font-size:14px; margin-top:8px; }
+</style>
+</head>
+<body>
+<main id="app"></main>
+<div class="bar" id="bar" hidden>
+  <div class="bar-in"><div class="count" id="count">Tocca le voci</div><button id="send" disabled>Invia</button></div>
+</div>
+<script>
+(function () {
+  "use strict";
+  var app = document.getElementById("app"), bar = document.getElementById("bar"),
+      countEl = document.getElementById("count"), sendBtn = document.getElementById("send");
+
+  function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls;
+    if (text != null) e.textContent = text; return e; }
+  function message(big, title, sub) {
+    app.textContent = ""; bar.hidden = true;
+    var box = el("div", "msg"); box.appendChild(el("div", "big", big)); box.appendChild(el("h1", null, title));
+    if (sub) box.appendChild(el("p", "sub", sub)); app.appendChild(box);
+  }
+  function decode(s) {
+    s = s.replace(/-/g, "+").replace(/_/g, "/"); while (s.length % 4) s += "=";
+    var bin = atob(s), bytes = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return JSON.parse(new TextDecoder().decode(bytes));
+  }
+
+  var p;
+  try { p = decode(location.hash.slice(1)); } catch (e) { p = null; }
+  // i dati restano solo in memoria: via dalla barra degli indirizzi e dalla cronologia della scheda
+  if (location.hash) history.replaceState(null, "", location.pathname);
+  if (!p || !p.k || !p.t || !/^[\w.-]+\/[\w.-]+$/.test(p.r || "") || !Array.isArray(p.i)) {
+    message("🔗", "Link non valido", "Apri questa pagina dal pulsante nella mail del briefing.");
+    return;
+  }
+
+  var NEXT = { "": "done", done: "drop", drop: "" }, LABEL = { done: "fatto", drop: "scartata" };
+  var state = {};
+
+  app.appendChild(el("h1", null, "Cosa hai fatto?"));
+  app.appendChild(el("p", "sub", "Briefing di " + p.d + ". Tocca una voce: una volta è fatta, due volte la scarti."));
+  var lastSection = null;
+  p.i.forEach(function (it) {
+    var id = it[0], title = it[1], meta = it[2], section = it[3];
+    if (section !== lastSection) { app.appendChild(el("h2", null, section)); lastSection = section; }
+    var card = el("div", "card"), body = el("div");
+    card.appendChild(el("div", "num", String(id)));
+    body.appendChild(el("div", "t", title));
+    if (meta) body.appendChild(el("div", "m", meta));
+    card.appendChild(body);
+    var badge = el("div", "state"); card.appendChild(badge);
+    card.addEventListener("click", function () {
+      var s = NEXT[state[id] || ""]; state[id] = s;
+      card.className = "card" + (s ? " " + s : ""); badge.textContent = LABEL[s] || "";
+      refresh();
+    });
+    app.appendChild(card);
+  });
+  app.appendChild(el("p", "hint", "Se il PC è spento non importa: il comando resta in coda e lo applico appena si accende."));
+  bar.hidden = false;
+
+  function picked(kind) { return Object.keys(state).filter(function (k) { return state[k] === kind; }); }
+  function refresh() {
+    var d = picked("done").length, x = picked("drop").length;
+    countEl.textContent = d || x ? [d ? d + (d === 1 ? " fatta" : " fatte") : "",
+                                    x ? x + (x === 1 ? " scartata" : " scartate") : ""].filter(Boolean).join(" · ")
+                                 : "Tocca le voci";
+    sendBtn.disabled = !(d || x);
+  }
+
+  sendBtn.addEventListener("click", function () {
+    var lines = [], d = picked("done"), x = picked("drop");
+    if (d.length) lines.push("fatto " + d.join(" "));
+    if (x.length) lines.push("scarta " + x.join(" "));
+    lines.push("", "codice: " + p.k);
+    sendBtn.disabled = true; sendBtn.textContent = "Invio…";
+    fetch("https://api.github.com/repos/" + p.r + "/issues", {
+      method: "POST", referrerPolicy: "no-referrer", credentials: "omit",
+      headers: { "Authorization": "Bearer " + p.t, "Accept": "application/vnd.github+json",
+                 "Content-Type": "application/json" },
+      body: JSON.stringify({ title: "jarvis " + p.d, body: lines.join("\n") })
+    }).then(function (r) {
+      if (!r.ok) throw new Error("GitHub ha risposto " + r.status);
+      message("✅", "Inviato", "Lo applico appena il PC è acceso (entro una decina di minuti) e ti mando una conferma.");
+    }).catch(function (e) {
+      sendBtn.disabled = false; sendBtn.textContent = "Riprova";
+      var old = document.querySelector(".err"); if (old) old.remove();
+      var err = el("div", "err", "Non è partito: " + e.message + ". Controlla la connessione e riprova.");
+      countEl.appendChild(err);
+    });
+  });
+})();
+</script>
+</body>
+</html>
