@@ -128,7 +128,7 @@
       body: JSON.stringify({ title: "jarvis " + p.d, body: lines.join("\n") })
     }).then(function (r) {
       if (!r.ok) throw new Error("GitHub ha risposto " + r.status);
-      message("✅", "Inviato", "Lo applico appena il PC è acceso (entro una decina di minuti) e ti mando una conferma.");
+      message("✅", "Inviato", "Lo applico appena il PC è acceso, entro una decina di minuti.");
     }).catch(function (e) {
       sendBtn.disabled = false; sendBtn.textContent = "Riprova";
       var old = document.querySelector(".err"); if (old) old.remove();
