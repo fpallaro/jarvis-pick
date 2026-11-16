@@ -45,6 +45,14 @@
   .msg { text-align:center; padding:60px 8px; }
   .msg .big { font-size:44px; }
   .err { color:var(--warn); font-size:14px; margin-top:8px; }
+  .b { flex:1; min-width:0; }
+  .ab { font-size:14px; margin-top:6px; }
+  .more { margin-top:8px; background:none; color:var(--accent); padding:0; font-size:14px; border-radius:0; }
+  .dg { margin-top:6px; }
+  .dg h3 { font-size:15px; margin:14px 0 2px; }
+  .dg .site { color:var(--muted); font-size:12px; }
+  .dg .site a { color:var(--accent); }
+  .dg p { font-size:14px; margin:6px 0 0; cursor:auto; user-select:text; }
 </style>
 </head>
 <body>
@@ -65,17 +73,27 @@
     var box = el("div", "msg"); box.appendChild(el("div", "big", big)); box.appendChild(el("h1", null, title));
     if (sub) box.appendChild(el("p", "sub", sub)); app.appendChild(box);
   }
-  function decode(s) {
+  function bytesOf(s) {
     s = s.replace(/-/g, "+").replace(/_/g, "/"); while (s.length % 4) s += "=";
     var bin = atob(s), bytes = new Uint8Array(bin.length);
     for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-    return JSON.parse(new TextDecoder().decode(bytes));
+    return bytes;
+  }
+  // "z.<base64>" = JSON compresso deflate-raw (link con i riassunti); senza prefisso = JSON semplice (link vecchi)
+  function decode(s) {
+    if (s.slice(0, 2) !== "z.") return Promise.resolve(JSON.parse(new TextDecoder().decode(bytesOf(s))));
+    var stream = new Blob([bytesOf(s.slice(2))]).stream().pipeThrough(new DecompressionStream("deflate-raw"));
+    return new Response(stream).text().then(JSON.parse);
   }
 
-  var p;
-  try { p = decode(location.hash.slice(1)); } catch (e) { p = null; }
+  var hash = location.hash.slice(1);
   // i dati restano solo in memoria: via dalla barra degli indirizzi e dalla cronologia della scheda
   if (location.hash) history.replaceState(null, "", location.pathname);
+  var start;
+  try { start = decode(hash); } catch (e) { start = Promise.reject(e); }
+  start.then(render, function () { render(null); });
+
+  function render(p) {
   if (!p || !p.k || !p.t || !/^[\w.-]+\/[\w.-]+$/.test(p.r || "") || !Array.isArray(p.i)) {
     message("🔗", "Link non valido", "Apri questa pagina dal pulsante nella mail del briefing.");
     return;
@@ -90,10 +108,36 @@
   p.i.forEach(function (it) {
     var id = it[0], title = it[1], meta = it[2], section = it[3];
     if (section !== lastSection) { app.appendChild(el("h2", null, section)); lastSection = section; }
-    var card = el("div", "card"), body = el("div");
+    var card = el("div", "card"), body = el("div", "b");
     card.appendChild(el("div", "num", String(id)));
     body.appendChild(el("div", "t", title));
     if (meta) body.appendChild(el("div", "m", meta));
+    var dg = it[4];
+    if (dg && dg.a) {
+      body.appendChild(el("div", "ab", dg.a));
+      if (Array.isArray(dg.s) && dg.s.length) {
+        var more = el("button", "more", "Leggi la sintesi dei link ▾"), box = el("div", "dg");
+        box.hidden = true;
+        dg.s.forEach(function (s) {
+          box.appendChild(el("h3", null, s[0]));
+          var site = el("div", "site");
+          // i link vengono dalla tua nota, non dal riassunto: solo http(s)
+          if (/^https?:\/\//i.test(s[2] || "")) {
+            var a = el("a", null, s[1] + " ↗"); a.href = s[2]; a.target = "_blank"; a.rel = "noopener noreferrer";
+            a.addEventListener("click", function (ev) { ev.stopPropagation(); });
+            site.appendChild(a);
+          } else { site.textContent = s[1]; }
+          box.appendChild(site);
+          String(s[3] || "").split(/\n\s*\n/).forEach(function (t) { if (t.trim()) box.appendChild(el("p", null, t)); });
+        });
+        box.addEventListener("click", function (ev) { ev.stopPropagation(); });
+        more.addEventListener("click", function (ev) {
+          ev.stopPropagation(); box.hidden = !box.hidden;
+          more.textContent = box.hidden ? "Leggi la sintesi dei link ▾" : "Chiudi la sintesi ▴";
+        });
+        body.appendChild(more); body.appendChild(box);
+      }
+    }
     card.appendChild(body);
     var badge = el("div", "state"); card.appendChild(badge);
     card.addEventListener("click", function () {
@@ -136,6 +180,7 @@
       countEl.appendChild(err);
     });
   });
+  }
 })();
 </script>
 </body>
