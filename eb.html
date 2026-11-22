@@ -28,7 +28,7 @@
 (function () {
   "use strict";
   // pagina di ritorno del consenso PSD2: non chiama nessun server, mostra solo il comando da incollare sul PC
-  var app = document.getElementById("app"), q = new URLSearchParams(location.search), url = location.href;
+  var app = document.getElementById("app"), q = new URLSearchParams(location.search);
   function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; e.textContent = text; return e; }
   // via dalla barra degli indirizzi e dalla cronologia: il codice serve una volta sola
   if (location.search) history.replaceState(null, "", location.pathname);
@@ -37,12 +37,15 @@
     app.appendChild(el("p", "err", q.get("error_description") || q.get("error")));
     return;
   }
-  if (!/^[\w.~-]{4,512}$/.test(q.get("code") || "")) {
+  // il comando finisce in un terminale: dentro solo code e state validati (niente caratteri di shell),
+  // tra apici singoli; qualsiasi altro parametro dell'indirizzo viene ignorato
+  var code = q.get("code") || "", state = q.get("state") || "";
+  if (!/^[\w.~-]{4,512}$/.test(code) || !/^[\w-]{8,128}$/.test(state)) {
     app.appendChild(el("h1", null, "Niente da collegare"));
     app.appendChild(el("p", null, "Apri questa pagina solo dal collegamento avviato da Jarvis sul PC."));
     return;
   }
-  var cmd = 'python -m brain.agent.psd2 finish "' + url.replace(/"/g, "") + '"';
+  var cmd = "python -m brain.agent.psd2 finish 'code=" + code + "&state=" + state + "'";
   app.appendChild(el("h1", null, "Consenso dato ✓"));
   app.appendChild(el("p", null, "Ultimo passo: incolla questo comando nel terminale di Jarvis sul PC (cartella jarvis, venv attivo). Il codice vale pochi minuti."));
   app.appendChild(el("pre", null, cmd));
