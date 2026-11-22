@@ -45,7 +45,7 @@
     app.appendChild(el("p", null, "Apri questa pagina solo dal collegamento avviato da Jarvis sul PC."));
     return;
   }
-  var cmd = "python -m brain.agent.psd2 finish 'code=" + code + "&state=" + state + "'";
+  var cmd = ".venv\Scripts\python -m brain.agent.psd2 finish 'code=" + code + "&state=" + state + "'";
   app.appendChild(el("h1", null, "Consenso dato ✓"));
   app.appendChild(el("p", null, "Ultimo passo: incolla questo comando nel terminale di Jarvis sul PC (cartella jarvis, venv attivo). Il codice vale pochi minuti."));
   app.appendChild(el("pre", null, cmd));
