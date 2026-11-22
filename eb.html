@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'none'; connect-src 'none'; base-uri 'none'; form-action 'none'">
+<meta name="referrer" content="no-referrer">
+<meta name="robots" content="noindex">
+<title>Jarvis · collegamento banca</title>
+<style>
+  :root { --bg:#f6f7f9; --card:#fff; --ink:#1f2328; --muted:#6b7280; --line:#e5e7eb; --accent:#2563eb; --warn:#b45309; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#0f1115; --card:#1a1d23; --ink:#e6e8eb; --muted:#9aa3af; --line:#2a2f37; --accent:#60a5fa; --warn:#f59e0b; }
+  }
+  body { margin:0; background:var(--bg); color:var(--ink); font:16px/1.45 -apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; }
+  main { max-width:640px; margin:0 auto; padding:32px 16px; }
+  h1 { font-size:22px; margin:0 0 8px; }
+  p { color:var(--muted); margin:0 0 14px; }
+  pre { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:12px; white-space:pre-wrap;
+        word-break:break-all; font-size:13px; margin:0 0 12px; user-select:all; }
+  button { border:0; border-radius:10px; background:var(--accent); color:#fff; font-size:16px; font-weight:600; padding:12px 20px; cursor:pointer; }
+  .err { color:var(--warn); }
+</style>
+</head>
+<body>
+<main id="app"></main>
+<script>
+(function () {
+  "use strict";
+  // pagina di ritorno del consenso PSD2: non chiama nessun server, mostra solo il comando da incollare sul PC
+  var app = document.getElementById("app"), q = new URLSearchParams(location.search), url = location.href;
+  function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; e.textContent = text; return e; }
+  // via dalla barra degli indirizzi e dalla cronologia: il codice serve una volta sola
+  if (location.search) history.replaceState(null, "", location.pathname);
+  if (q.get("error")) {
+    app.appendChild(el("h1", null, "Collegamento non riuscito"));
+    app.appendChild(el("p", "err", q.get("error_description") || q.get("error")));
+    return;
+  }
+  if (!/^[\w.~-]{4,512}$/.test(q.get("code") || "")) {
+    app.appendChild(el("h1", null, "Niente da collegare"));
+    app.appendChild(el("p", null, "Apri questa pagina solo dal collegamento avviato da Jarvis sul PC."));
+    return;
+  }
+  var cmd = 'python -m brain.agent.psd2 finish "' + url.replace(/"/g, "") + '"';
+  app.appendChild(el("h1", null, "Consenso dato ✓"));
+  app.appendChild(el("p", null, "Ultimo passo: incolla questo comando nel terminale di Jarvis sul PC (cartella jarvis, venv attivo). Il codice vale pochi minuti."));
+  app.appendChild(el("pre", null, cmd));
+  var b = el("button", null, "Copia il comando");
+  b.addEventListener("click", function () {
+    navigator.clipboard.writeText(cmd).then(function () { b.textContent = "Copiato ✓"; });
+  });
+  app.appendChild(b);
+})();
+</script>
+</body>
+</html>
